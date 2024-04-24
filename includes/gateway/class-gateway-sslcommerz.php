@@ -253,7 +253,14 @@ class SSLCommerz extends \CampTix_Payment_Method {
 				'transaction_details' => $_REQUEST,
 			];
 
-			if ( $this->verify_transaction( $val_id, $payment_token ) ) {
+			$validated = $this->verify_transaction( $val_id, $payment_token );
+			// If we don't get a valid result from the verify endpoint, don't change the status yet.
+			if ( ! is_bool( $validated ) ) {
+				$camptix->log( 'Transaction Verification failed', null, $payment_data );
+				return;
+			}
+
+			if ( $validated ) {
 				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_COMPLETED, $payment_data );
 			} else {
 				$camptix->log( 'IPN Verification failed', null, $payment_data );
@@ -319,7 +326,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	 *
 	 * @param  string $payment_token
 	 *
-	 * @return boolean
+	 * @return boolean|null
 	 */
 	public function verify_transaction( $val_id, $payment_token ) {
 		global $camptix;
@@ -332,20 +339,23 @@ class SSLCommerz extends \CampTix_Payment_Method {
 				'store_id'     => $this->options['merchant_id'],
 				'store_passwd' => $this->options['store_password'],
 				'format'       => 'json'
-			]
+			],
+			'timeout' => 30,
 		];
 
 		$response = wp_remote_get( $url, $args );
 
-		if ( ! is_wp_error( $response ) ) {
-			$body  = json_decode( wp_remote_retrieve_body( $response ) );
-			$order = $this->get_order( $payment_token );
+		if ( is_wp_error( $response ) ) {
+			return null; // Not false, we don't know if the transaction failed - there was an issue connecting to the API.
+		}
 
-			// $camptix->log( print_r( $body, true ) );
+		$body  = json_decode( wp_remote_retrieve_body( $response ) );
+		$order = $this->get_order( $payment_token );
 
-			if ( in_array( $body->status, ['VALID', 'VALIDATED'] ) && $order['total'] == $body->amount ) {
-				return true;
-			}
+		// $camptix->log( print_r( $body, true ) );
+
+		if ( in_array( $body->status, ['VALID', 'VALIDATED'] ) && $order['total'] == $body->amount ) {
+			return true;
 		}
 
 		return false;
