@@ -243,15 +243,15 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 		$camptix->log( 'Payment validation from SSLCommerz', null, compact( 'payment_token', 'transaction_id', 'val_id' ) );
 
+		$payment_data = [
+			'transaction_id'      => $transaction_id,
+			'val_id'              => $val_id,
+			'transaction_details' => $_REQUEST,
+		];
+		
 		if ( $this->_ipn_hash_varify( $this->options['store_password'] ) ) {
 
 			$camptix->log('IPN hash verified');
-
-			$payment_data = [
-				'transaction_id'      => $transaction_id,
-				'val_id'              => $val_id,
-				'transaction_details' => $_REQUEST,
-			];
 
 			$validated = $this->verify_transaction( $val_id, $payment_token );
 			// If we don't get a valid result from the verify endpoint, don't change the status yet.
@@ -266,6 +266,8 @@ class SSLCommerz extends \CampTix_Payment_Method {
 				$camptix->log( 'IPN Verification failed', null, $payment_data );
 				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
 			}
+		} else {
+			$camptix->log('IPN hash verification failed', null, $payment_data );
 		}
 
 		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED );
