@@ -210,6 +210,8 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	 * Without this, upon completing a payment, users will simply land on the ticket page without any indication
 	 * they've got a ticket.
 	 *
+	 * Alternative implementation if this fails: Output a <form> that auto-submits a POST from same-origin.
+	 *
 	 * NOTE: payment_notify IPN is not covered here, as it's an unauthenticated server-to-server request, and
 	 * thus not blocked by Require Login.
 	 */
@@ -274,7 +276,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	 * @return void
 	 */
 	function template_redirect() {
-		if ( this->id != $_REQUEST['tix_payment_method'] ?? '' ) {
+		if ( $this->id != ( $_REQUEST['tix_payment_method'] ?? '' ) ) {
 			return;
 		}
 
@@ -305,44 +307,28 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		$transaction_id = $_REQUEST['tran_id'] ?? '';
 		$val_id         = $_REQUEST['val_id'] ?? '';
 
-		$order = $this->get_order( $payment_token );
-
 		// The payment transaction data is always in the POST data.
 		$transaction_data = $_POST;
 
-		$camptix->log(
-			'Payment validation from SSLCommerz',
-			$order['attendee_id'] ?? null, // Should be known..
-			array(
-				'payment_token'    => $payment_token,
-				'transaction_id'   => $transaction_id,
-				'val_id'           => $val_id,
-				'transaction_data' => $this->prepare_transaction_for_log( $transaction_data ),
-			)
-		);
+		$payment_data = [
+			'transaction_id'      => $transaction_id,
+			'val_id'              => $val_id,
+			'transaction_details' => $this->prepare_transaction_for_log( $transaction_data ),
+		];
 
 		if ( $this->ipn_hash_varify( $this->options['store_password'], $transaction_data ) ) {
-
-			$payment_data = [
-				'transaction_id'      => $transaction_id,
-				'val_id'              => $val_id,
-				'transaction_details' => $transaction_data,
-			];
 
 			if ( $this->verify_transaction( $val_id, $payment_token ) ) {
 				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_COMPLETED, $payment_data );
 			} else {
-				$camptix->log(
-					'IPN Verification failed',
-					$order['attendee_id'] ?? null,
-					$payment_data
-				);
+				// Keep a note in the transaction details for why it failed.
+				$payment_data['transaction_details']['IPN_VERIFICATION_FAILED'] = 'IPN Verification failed';
 
 				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
 			}
 		}
 
-		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED );
+		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
 	}
 
 	/**
@@ -358,18 +344,14 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			return $camptix->error( 'empty token' );
 		}
 
-		$order = $this->get_order( $payment_token );
-		if ( ! $order ) {
-			return $camptix->error( 'could not find order' );
-		}
+		$transaction_id      = $_REQUEST['tran_id'] ?? '';
+		$transaction_details = $this->prepare_transaction_for_log( $_POST );
 
-		$camptix->log(
-			'Payment canceled by user: ' . $payment_token,
-			$order['attendee_id'],
-			$this->prepare_transaction_for_log( $_POST )
+		return $camptix->payment_result(
+			$payment_token,
+			\CampTix_Plugin::PAYMENT_STATUS_CANCELLED,
+			compact( 'transaction_id', 'transaction_details' )
 		);
-
-		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_CANCELLED );
 	}
 
 	/**
@@ -385,19 +367,14 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			return $camptix->error( 'empty token' );
 		}
 
-		$order = $this->get_order( $payment_token );
-		if ( ! $order ) {
-			return $camptix->error( 'could not find order' );
-		}
+		$transaction_id      = $_REQUEST['tran_id'] ?? '';
+		$transaction_details = $this->prepare_transaction_for_log( $_POST );
 
-		// Log the failure against the order.
-		$camptix->log(
-			'Payment failed: ' . $payment_token,
-			$order['attendee_id'],
-			$this->prepare_transaction_for_log( $_POST )
+		return $camptix->payment_result(
+			$payment_token,
+			\CampTix_Plugin::PAYMENT_STATUS_FAILED,
+			compact( 'transaction_id', 'transaction_details' )
 		);
-
-		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED );
 	}
 
 	/**
