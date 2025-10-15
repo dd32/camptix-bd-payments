@@ -26,6 +26,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		if ( $this->gateway_enabled() ) {
 			add_filter( 'camptix_form_register_complete_attendee_object', [ $this, 'add_attendee_info' ], 10, 3 );
 			add_action( 'template_redirect', [ $this, 'template_redirect' ] );
+			add_action( 'template_redirect', [ $this, 'early_template_redirect' ], 5 ); // Before CampTix_Require_Login::block_unauthenticated_actions
 		}
 	}
 
@@ -199,6 +200,47 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	}
 
 	/**
+	 * Monitor for return-from-gateway earlier in the request.
+	 *
+	 * SSLCommerz redirects back with a cross-domain POST request, which will result in the request
+	 * not being authenticated on the WordCamp.org side, and thus blocked by the Require Login add-on.
+	 *
+	 * The lack of cookies is a browser security feature, and while we can work around this, we really shouldn't.
+	 * Instead, this validates the returned POST data and if valid, submits a local GET redirect in place of it.
+	 * The POST data (transaction/error details) are saved in a temporary cookie for use on the GET request.
+	 *
+	 * Without this, upon completing a payment, users will simply land on the ticket page without any indication
+	 * they've got a ticket.
+	 *
+	 * NOTE: payment_notify IPN is not covered here, as it's an unauthenticated server-to-server request, and
+	 * thus not blocked by Require Login.
+	 */
+	function early_template_redirect() {
+		if (
+			'POST' !== $_SERVER['REQUEST_METHOD'] ||
+			! isset( $_REQUEST['tix_action'], $_REQUEST['tix_payment_method'] ) ||
+			$this->id != $_REQUEST['tix_payment_method'] ||
+			! in_array( $_REQUEST['tix_action'], [ 'payment_return', 'payment_failed', 'payment_cancel' ] )
+		) {
+			return;
+		}
+
+		// Set a temporary cookie with the POST'd transaction data, which we'll use on the GET request.
+		if ( $this->_ipn_hash_varify( $this->options['store_password'], $_POST ) ) {
+			$cookie_data = json_encode( $_POST );
+			setcookie( $this->id . '_transaction', $cookie_data, time() + 300, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+		}
+
+		wp_safe_redirect( add_query_arg( [
+			'tix_action'         => $_REQUEST['tix_action'] ?? '',
+			'tix_payment_token'  => $_REQUEST['tix_payment_token'] ?? '',
+			'tix_payment_method' => $this->id,
+		], $GLOBALS['camptix']->get_tickets_url() ) );
+
+		die();
+	}
+
+	/**
 	 * Monitor for IPN and payment return
 	 *
 	 * @return void
@@ -208,27 +250,46 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			return;
 		}
 
-		if ( isset( $_GET['tix_action'] ) ) {
-			if ( 'payment_cancel' == $_GET['tix_action'] ) {
+		/*
+		 * If the request has the returned POST data in the temporary cookie, extract it and merge it into the request.
+		 *
+		 * See early_template_redirect() for more details.
+		 */
+		if ( isset( $_COOKIE[ $this->id . '_transaction' ] ) ) {
+			// Retrieve the temporary cookie with the POST'd transaction data.
+			$transaction_data = json_decode( wp_unslash( $_COOKIE[ $this->id . '_transaction' ] ), true );
+
+			if (
+				is_array( $transaction_data ) &&
+				'GET' === $_SERVER['REQUEST_METHOD'] &&
+				$this->_ipn_hash_varify( $this->options['store_password'], $transaction_data )
+			) {
+				// Merge the POST data into the request so that payment_notify() can use it.
+				$_REQUEST = array_merge( $_REQUEST, $transaction_data );
+				$_POST    = array_merge( $_POST, $transaction_data );
+			}
+
+			// Clear the temporary cookie.
+			setcookie( $this->id . '_transaction', '', time() - HOUR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+		}
+
+		switch ( $_GET['tix_action'] ?? '' ) {
+			case 'payment_return':
+				// Payment return is handled as a notification, so fall through to that case.
+			case 'payment_notify':
+				$this->payment_notify();
+				break;
+			case 'payment_cancel':
 				$this->payment_cancel();
-			}
-
-			if ( 'payment_return' == $_GET['tix_action'] ) {
-				$this->payment_notify();
-			}
-
-			if ( 'payment_notify' == $_GET['tix_action'] ) {
-				$this->payment_notify();
-			}
-
-			if ( 'payment_failed' == $_GET['tix_action'] ) {
+				break;
+			case 'payment_failed':
 				$this->payment_failed();
-			}
+				break;
 		}
 	}
 
 	/**
-	 * Process payment return step
+	 * Process payment return step (IPN or interactively).
 	 *
 	 * @return mixed
 	 */
