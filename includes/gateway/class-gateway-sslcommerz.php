@@ -155,11 +155,9 @@ class SSLCommerz extends \CampTix_Payment_Method {
 				wp_redirect( $body['GatewayPageURL'] );
 				exit;
 			}
-		} else {
-			$body = wp_remote_retrieve_body( $response );
-			echo __( 'Something went wrong', 'bd-payments-camptix' );
-			return;
 		}
+
+		_e( 'Something went wrong with creating the payment session.', 'bd-payments-camptix' );
 
 		return;
 	}
