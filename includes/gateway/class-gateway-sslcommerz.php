@@ -1,5 +1,6 @@
 <?php
 namespace CamptixBD\Gateway;
+use CampTix_Plugin, CampTix_Payment_Method;
 
 // Exit if accessed directly
 if ( ! defined( 'ABSPATH' ) ) {
@@ -9,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * SSLCommerz gateway
  */
-class SSLCommerz extends \CampTix_Payment_Method {
+class SSLCommerz extends CampTix_Payment_Method {
 
 	public $id                   = 'sslcommerz';
 	public $name                 = 'SSLCommerz';
@@ -245,7 +246,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			}
 
 			// Clear the temporary cookie.
-			// setcookie( $this->id . '_postdata', '', time() - HOUR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+			setcookie( $this->id . '_postdata', '', time() - HOUR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
 		}
 
 		// Only proceed if this is a return from the gateway with POST data.
@@ -322,16 +323,16 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		if ( $this->ipn_hash_varify( $this->options['store_password'], $transaction_data ) ) {
 
 			if ( $this->verify_transaction( $val_id, $payment_token ) ) {
-				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_COMPLETED, $payment_data );
+				return $camptix->payment_result( $payment_token, CampTix_Plugin::PAYMENT_STATUS_COMPLETED, $payment_data );
 			} else {
 				// Keep a note in the transaction details for why it failed.
 				$payment_data['transaction_details']['IPN_VERIFICATION_FAILED'] = 'IPN Verification failed';
 
-				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
+				return $camptix->payment_result( $payment_token, CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
 			}
 		}
 
-		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
+		return $camptix->payment_result( $payment_token, CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
 	}
 
 	/**
@@ -352,7 +353,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 		return $camptix->payment_result(
 			$payment_token,
-			\CampTix_Plugin::PAYMENT_STATUS_CANCELLED,
+			CampTix_Plugin::PAYMENT_STATUS_CANCELLED,
 			compact( 'transaction_id', 'transaction_details' )
 		);
 	}
@@ -375,7 +376,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 		return $camptix->payment_result(
 			$payment_token,
-			\CampTix_Plugin::PAYMENT_STATUS_FAILED,
+			CampTix_Plugin::PAYMENT_STATUS_FAILED,
 			compact( 'transaction_id', 'transaction_details' )
 		);
 	}
@@ -461,10 +462,11 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 		$camptix->payment_result(
 			$payment_token,
-			\CampTix_Plugin::PAYMENT_STATUS_COMPLETED,
+			CampTix_Plugin::PAYMENT_STATUS_COMPLETED,
 			$payment_data,
 			false /* non-interactive */
 		);
+
 	}
 
 
