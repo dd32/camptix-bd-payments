@@ -159,8 +159,6 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		}
 
 		return __( 'Something went wrong with creating the payment session.', 'bd-payments-camptix' );
-
-		return;
 	}
 
 	/**
@@ -300,10 +298,21 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		$transaction_id = isset( $_REQUEST['tran_id'] ) ? $_REQUEST['tran_id'] : '';
 		$val_id         = isset( $_REQUEST['val_id'] ) ? $_REQUEST['val_id'] : '';
 
+		$order = $this->get_order( $payment_token );
+
 		// The payment transaction data is always in the POST data.
 		$transaction_data = $_POST;
 
-		$camptix->log( 'Payment validation from SSLCommerz', null, compact( 'payment_token', 'transaction_id', 'val_id', 'transaction_data' ) );
+		$camptix->log(
+			'Payment validation from SSLCommerz',
+			$order['attendee_id'] ?? null, // Should be known..
+			array(
+				'payment_token'    => $payment_token,
+				'transaction_id'   => $transaction_id,
+				'val_id'           => $val_id,
+				'transaction_data' => $this->prepare_transaction_for_log( $transaction_data ),
+			)
+		);
 
 		if ( $this->_ipn_hash_varify( $this->options['store_password'], $transaction_data ) ) {
 
@@ -342,20 +351,11 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			return $camptix->error( 'could not find order' );
 		}
 
-		/*
-		 * Log the cancel against the order.
-		 * Unsetting additional fields that are not necessary in the log.
-		 */
-		$log_details = array_filter( $_POST );
-		unset(
-			$log_details['pass'], // Present in sandbox mode, not production :phew:.
-			$log_details['key'],
-			$log_details['store_id'],
-			$log_details['value_a'], $log_details['value_b'], $log_details['value_c'], $log_details['value_d'],
-			$log_details['verify_sign'], $log_details['verify_sign_sha2'], $log_details['verify_key']
+		$camptix->log(
+			'Payment canceled by user: ' . $payment_token,
+			$order['attendee_id'],
+			$this->prepare_transaction_for_log( $_POST )
 		);
-
-		$camptix->log( 'Payment canceled by user: ' . $payment_token, $order['attendee_id'], $log_details );
 
 		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_CANCELLED );
 	}
@@ -378,20 +378,12 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			return $camptix->error( 'could not find order' );
 		}
 
-		/*
-		 * Log the failure against the order.
-		 * Unsetting additional fields that are not necessary in the log.
-		 */
-		$log_details = array_filter( $_POST );
-		unset(
-			$log_details['pass'], // Present in sandbox mode, not production :phew:.
-			$log_details['key'],
-			$log_details['store_id'],
-			$log_details['value_a'], $log_details['value_b'], $log_details['value_c'], $log_details['value_d'],
-			$log_details['verify_sign'], $log_details['verify_sign_sha2'], $log_details['verify_key']
+		// Log the failure against the order.
+		$camptix->log(
+			'Payment failed: ' . $payment_token,
+			$order['attendee_id'],
+			$this->prepare_transaction_for_log( $_POST )
 		);
-
-		$camptix->log( 'Payment failed: ' . $payment_token, $order['attendee_id'], $log_details );
 
 		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED );
 	}
@@ -475,6 +467,27 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Prepare transaction data for logging.
+	 *
+	 * @param array $data The transaction data.
+	 * @return array The sanitized transaction data for logging.
+	 */
+	protected function prepare_transaction_for_log( $data ) {
+		// Remove falsey stuff.
+		$data = array_filter( $data );
+
+		unset(
+			$data['pass'], // Present in sandbox mode, not production :phew:.
+			$data['key'],
+			$data['store_id'],
+			$data['value_a'], $data['value_b'], $data['value_c'], $data['value_d'],
+			$data['verify_sign'], $data['verify_sign_sha2'], $data['verify_key']
+		);
+
+		return $data;
 	}
 
 }
