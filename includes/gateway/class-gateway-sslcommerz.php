@@ -325,7 +325,12 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			if ( $this->verify_transaction( $val_id, $payment_token ) ) {
 				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_COMPLETED, $payment_data );
 			} else {
-				$camptix->log( 'IPN Verification failed', null, $payment_data );
+				$camptix->log(
+					'IPN Verification failed',
+					$order['attendee_id'] ?? null,
+					$payment_data
+				);
+
 				return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED, $payment_data );
 			}
 		}
