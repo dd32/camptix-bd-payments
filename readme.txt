@@ -60,6 +60,7 @@ Nothing here
 = v1.3 (??, 2025) =
  * Fix compatibility with Camptix Require Login.
  * Improved logging for transaction data.
+ * Improved checks to prevent successful payments being marked as timeout.
 
 = v1.2 (15th June, 2019) =
 
