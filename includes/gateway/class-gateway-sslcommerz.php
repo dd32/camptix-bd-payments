@@ -410,6 +410,8 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	 * @return false|object
 	 */
 	protected function api( $method = 'GET', $endpoint = '/', $body = [] ) {
+		global $camptix;
+
 		$url = $this->options['sandbox'] ? 'https://sandbox.sslcommerz.com' : 'https://securepay.sslcommerz.com';
 		$url = $url . $endpoint;
 
@@ -422,11 +424,13 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		$response = wp_remote_request( $url, $args );
 
 		if ( is_wp_error( $response ) ) {
+			$camptix->log( 'SSLCommerz API error: ' . $response->get_error_message() );
 			return false;
 		}
 
 		$result = json_decode( wp_remote_retrieve_body( $response ) );
 		if ( ! $result ) {
+			$camptix->log( 'SSLCommerz API error: Not JSON', null, wp_remote_retrieve_body( $response ) );
 			return false;
 		}
 
