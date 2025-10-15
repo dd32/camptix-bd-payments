@@ -488,6 +488,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			$data['pass'], // Present in sandbox mode, not production :phew:.
 			$data['key'],
 			$data['store_id'],
+			$data['sessionkey'], $session['val_id'],
 			$data['value_a'], $data['value_b'], $data['value_c'], $data['value_d'],
 			$data['verify_sign'], $data['verify_sign_sha2'], $data['verify_key']
 		);
