@@ -27,6 +27,9 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			add_filter( 'camptix_form_register_complete_attendee_object', [ $this, 'add_attendee_info' ], 10, 3 );
 			add_action( 'template_redirect', [ $this, 'template_redirect' ] );
 			add_action( 'template_redirect', [ $this, 'early_template_redirect' ], 5 ); // Before CampTix_Require_Login::block_unauthenticated_actions
+
+			// Catch any attendee timeouts that actually paid.
+			add_action( 'camptix_pre_attendee_timeout', array( $this, 'pre_attendee_timeout' ) );
 		}
 	}
 
@@ -148,6 +151,12 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		$response = $this->api( 'POST', '/gwprocess/v3/api.php', $args );
 
 		if ( ! empty( $response->GatewayPageURL ) ) {
+
+			// Store the sessionkey for future reference (timeout).
+			if ( ! empty( $response->sessionkey ) ) {
+				update_post_meta( $attendee->ID, '_sslcommerz_session_key', $response->sessionkey );
+			}
+
 			wp_redirect( $response->GatewayPageURL );
 			exit;
 		}
@@ -236,7 +245,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			}
 
 			// Clear the temporary cookie.
-			setcookie( $this->id . '_postdata', '', time() - HOUR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+			// setcookie( $this->id . '_postdata', '', time() - HOUR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
 		}
 
 		// Only proceed if this is a return from the gateway with POST data.
@@ -399,6 +408,65 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 		return false;
 	}
+
+	/**
+	 * Prevent a paid order from being marked as timeout.
+	 *
+	 * @param int $attendee_id The attendee ID that is about to be timed out.
+	 * @return void
+	 */
+	public function pre_attendee_timeout( $attendee_id ) {
+		/** @var CampTix_Plugin $camptix */
+		global $camptix;
+
+		// precheck the attendee is in draft.
+		if ( 'draft' !== get_post_field( 'post_status', $attendee_id ) ) {
+			return;
+		}
+
+		// Get the session ID.
+		$session_key   = get_post_meta( $attendee_id, '_sslcommerz_session_key', true );
+		$payment_token = get_post_meta( $attendee_id, 'tix_payment_token', true );
+		if ( ! $session_key || ! $payment_token ) {
+			return;
+		}
+
+		$response = $this->api( 'GET', '/validator/api/merchantTransIDvalidationAPI.php', [
+			'sessionkey'   => $session_key,
+			'store_id'     => $this->options['merchant_id'],
+			'store_passwd' => $this->options['store_password'],
+		] );
+		if ( ! $response ) {
+			return;
+		}
+
+		// If the transaction wasn't successful, bail out.
+		if ( ! in_array( $response->status, [ 'VALID', 'VALIDATED' ] ) ) {
+			return;
+		}
+
+		// If the order totals don't match, bail out.
+		$order = $this->get_order( $payment_token );
+		if ( $order['total'] != $response->amount ) {
+			return;
+		}
+
+		// Order was successful, mark as paid.
+		$camptix->log( 'SSLCommerz checkout timed out, but order succeeded.', $attendee_id, $response );
+
+		$payment_data = [
+			'transaction_id'      => $response->tran_id,
+			'transaction_details' => $this->prepare_transaction_for_log( (array) $response ),
+		];
+
+		$camptix->payment_result(
+			$payment_token,
+			\CampTix_Plugin::PAYMENT_STATUS_COMPLETED,
+			$payment_data,
+			false /* non-interactive */
+		);
+	}
+
 
 	/**
 	 * Make an API call
