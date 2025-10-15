@@ -145,17 +145,11 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			'cus_phone'    => $phone,
 		];
 
-		$response = wp_remote_post( $url . '/gwprocess/v3/api.php', [
-			'body' => $args
-		] );
+		$response = $this->api( 'POST', '/gwprocess/v3/api.php', $args );
 
-		if ( ! is_wp_error( $response ) ) {
-			$body = json_decode( wp_remote_retrieve_body( $response ), true );
-
-			if ( ! empty( $body['GatewayPageURL'] ) ) {
-				wp_redirect( $body['GatewayPageURL'] );
-				exit;
-			}
+		if ( ! empty( $response->GatewayPageURL ) ) {
+			wp_redirect( $response->GatewayPageURL );
+			exit;
 		}
 
 		return __( 'Something went wrong with creating the payment session.', 'bd-payments-camptix' );
@@ -387,30 +381,56 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	public function verify_transaction( $val_id, $payment_token ) {
 		global $camptix;
 
-		$url  = $this->options['sandbox'] ? 'https://sandbox.sslcommerz.com' : 'https://securepay.sslcommerz.com';
-		$url  = $url . '/validator/api/validationserverAPI.php';
-		$args = [
-			'body' => [
-				'val_id'       => $val_id,
-				'store_id'     => $this->options['merchant_id'],
-				'store_passwd' => $this->options['store_password'],
-				'format'       => 'json'
-			],
-			'timeout' => 30,
-		];
+		$response = $this->api( 'GET', '/validator/api/validationserverAPI.php', [
+			'val_id'       => $val_id,
+			'store_id'     => $this->options['merchant_id'],
+			'store_passwd' => $this->options['store_password'],
+			'format'       => 'json'
+		] );
+		if ( ! $response ) {
+			return false;
+		}
 
-		$response = wp_remote_get( $url, $args );
+		$order = $this->get_order( $payment_token );
 
-		if ( ! is_wp_error( $response ) ) {
-			$body  = json_decode( wp_remote_retrieve_body( $response ) );
-			$order = $this->get_order( $payment_token );
-
-			if ( in_array( $body->status, ['VALID', 'VALIDATED'] ) && $order['total'] == $body->amount ) {
-				return true;
-			}
+		if ( in_array( $response->status, ['VALID', 'VALIDATED'] ) && $order['total'] == $response->amount ) {
+			return true;
 		}
 
 		return false;
+	}
+
+	/**
+	 * Make an API call
+	 *
+	 * @param  string $method   HTTP method (GET | POST)
+	 * @param  string $endpoint API endpoint
+	 * @param  array  $body     Request body
+	 *
+	 * @return false|object
+	 */
+	protected function api( $method = 'GET', $endpoint = '/', $body = [] ) {
+		$url = $this->options['sandbox'] ? 'https://sandbox.sslcommerz.com' : 'https://securepay.sslcommerz.com';
+		$url = $url . $endpoint;
+
+		$args = [
+			'method'  => strtoupper( $method ),
+			'timeout' => 30,
+			'body'    => $body,
+		];
+
+		$response = wp_remote_request( $url, $args );
+
+		if ( is_wp_error( $response ) ) {
+			return false;
+		}
+
+		$result = json_decode( wp_remote_retrieve_body( $response ) );
+		if ( ! $result ) {
+			return false;
+		}
+
+		return $result;
 	}
 
 	/**
