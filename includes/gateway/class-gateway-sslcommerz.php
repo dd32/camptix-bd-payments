@@ -214,6 +214,36 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	 * thus not blocked by Require Login.
 	 */
 	function early_template_redirect() {
+		/*
+		 * Undo the POST => Cookie behaviour on the redirect.
+		 * Read the next section first.
+		 *
+		 * If the request has the returned POST data in the temporary cookie, extract it and merge it into the request.
+		 *
+		 * See early_template_redirect() for more details.
+		 */
+		if (
+			empty( $_POST ) &&
+			isset( $_COOKIE[ $this->id . '_postdata' ] )
+		) {
+			// Retrieve the temporary cookie with the POST'd transaction data.
+			$transaction_data = json_decode( wp_unslash( $_COOKIE[ $this->id . '_postdata' ] ), true );
+
+			if (
+				is_array( $transaction_data ) &&
+				'GET' === $_SERVER['REQUEST_METHOD'] &&
+				$this->ipn_hash_varify( $this->options['store_password'], $transaction_data )
+			) {
+				// Merge the POST data into the request so that payment_notify() can use it.
+				$_REQUEST = array_merge( $_REQUEST, $transaction_data );
+				$_POST    = array_merge( $_POST, $transaction_data );
+			}
+
+			// Clear the temporary cookie.
+			setcookie( $this->id . '_postdata', '', time() - HOUR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+		}
+
+		// Only proceed if this is a return from the gateway with POST data.
 		if (
 			'POST' !== $_SERVER['REQUEST_METHOD'] ||
 			! isset( $_REQUEST['tix_action'], $_REQUEST['tix_payment_method'] ) ||
@@ -226,7 +256,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		// Set a temporary cookie with the POST'd transaction data, which we'll use on the GET request.
 		if ( $this->ipn_hash_varify( $this->options['store_password'], $_POST ) ) {
 			$cookie_data = json_encode( $_POST );
-			setcookie( $this->id . '_transaction', $cookie_data, time() + 300, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+			setcookie( $this->id . '_postdata', $cookie_data, time() + 300, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
 		}
 
 		wp_safe_redirect( add_query_arg( [
@@ -244,31 +274,8 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	 * @return void
 	 */
 	function template_redirect() {
-		if ( ! isset( $_REQUEST['tix_payment_method'] ) || $this->id != $_REQUEST['tix_payment_method'] ) {
+		if ( this->id != $_REQUEST['tix_payment_method'] ?? '' ) {
 			return;
-		}
-
-		/*
-		 * If the request has the returned POST data in the temporary cookie, extract it and merge it into the request.
-		 *
-		 * See early_template_redirect() for more details.
-		 */
-		if ( isset( $_COOKIE[ $this->id . '_transaction' ] ) ) {
-			// Retrieve the temporary cookie with the POST'd transaction data.
-			$transaction_data = json_decode( wp_unslash( $_COOKIE[ $this->id . '_transaction' ] ), true );
-
-			if (
-				is_array( $transaction_data ) &&
-				'GET' === $_SERVER['REQUEST_METHOD'] &&
-				$this->ipn_hash_varify( $this->options['store_password'], $transaction_data )
-			) {
-				// Merge the POST data into the request so that payment_notify() can use it.
-				$_REQUEST = array_merge( $_REQUEST, $transaction_data );
-				$_POST    = array_merge( $_POST, $transaction_data );
-			}
-
-			// Clear the temporary cookie.
-			setcookie( $this->id . '_transaction', '', time() - HOUR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
 		}
 
 		switch ( $_GET['tix_action'] ?? '' ) {
