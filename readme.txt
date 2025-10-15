@@ -58,7 +58,8 @@ Nothing here
 == Changelog ==
 
 = v1.3 (??, 2025) =
- * Work in progress
+ * Fix compatibility with Camptix Require Login.
+ * Improved logging for transaction data.
 
 = v1.2 (15th June, 2019) =
 
