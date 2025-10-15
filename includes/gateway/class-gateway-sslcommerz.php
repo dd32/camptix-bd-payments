@@ -241,7 +241,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 		$camptix->log( 'Payment validation from SSLCommerz', null, compact( 'payment_token', 'transaction_id', 'val_id' ) );
 
-		if ( $this->_ipn_hash_varify( $this->options['store_password'] ) ) {
+		if ( $this->_ipn_hash_varify( $this->options['store_password'], $_POST ) ) {
 
 			$camptix->log('IPN hash verified');
 
@@ -352,20 +352,21 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	/**
 	 * Verify IPN hash
 	 *
-	 * @param  string $store_passwd
+	 * @param  string $store_passwd The store password.
+	 * @param  array  $data         The data to validate.
 	 *
 	 * @return boolean
 	 */
-	function _ipn_hash_varify( $store_passwd ) {
+	function _ipn_hash_varify( $store_passwd, $data ) {
 
-		if ( isset( $_POST ) && isset( $_POST['verify_sign'] ) && isset( $_POST['verify_key'] ) ) {
-			$pre_define_key = explode(',', $_POST['verify_key']);
+		if ( isset( $data['verify_sign'] ) && isset( $data['verify_key'] ) ) {
+			$pre_define_key = explode(',', $data['verify_key']);
 			$new_data       = array();
 
 			if ( !empty( $pre_define_key ) ) {
 				foreach ( $pre_define_key as $value ) {
-					if ( isset( $_POST[ $value ] ) ) {
-						$new_data[ $value ] = $_POST[$value];
+					if ( isset( $data[ $value ] ) ) {
+						$new_data[ $value ] = $data[$value];
 					}
 				}
 			}
@@ -383,7 +384,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 			$hash_string = rtrim( $hash_string, '&' );
 
-			if ( md5( $hash_string ) == $_POST['verify_sign'] ) {
+			if ( md5( $hash_string ) == $data['verify_sign'] ) {
 				return true;
 			} else {
 				return false;
