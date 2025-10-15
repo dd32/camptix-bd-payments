@@ -152,7 +152,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		if ( ! is_wp_error( $response ) ) {
 			$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-			if ( isset( $body['GatewayPageURL'] ) && $body['GatewayPageURL'] != '' ) {
+			if ( ! empty( $body['GatewayPageURL'] ) ) {
 				wp_redirect( $body['GatewayPageURL'] );
 				exit;
 			}
