@@ -158,7 +158,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			}
 		}
 
-		_e( 'Something went wrong with creating the payment session.', 'bd-payments-camptix' );
+		return __( 'Something went wrong with creating the payment session.', 'bd-payments-camptix' );
 
 		return;
 	}
