@@ -224,7 +224,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		}
 
 		// Set a temporary cookie with the POST'd transaction data, which we'll use on the GET request.
-		if ( $this->_ipn_hash_varify( $this->options['store_password'], $_POST ) ) {
+		if ( $this->ipn_hash_varify( $this->options['store_password'], $_POST ) ) {
 			$cookie_data = json_encode( $_POST );
 			setcookie( $this->id . '_transaction', $cookie_data, time() + 300, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
 		}
@@ -260,7 +260,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			if (
 				is_array( $transaction_data ) &&
 				'GET' === $_SERVER['REQUEST_METHOD'] &&
-				$this->_ipn_hash_varify( $this->options['store_password'], $transaction_data )
+				$this->ipn_hash_varify( $this->options['store_password'], $transaction_data )
 			) {
 				// Merge the POST data into the request so that payment_notify() can use it.
 				$_REQUEST = array_merge( $_REQUEST, $transaction_data );
@@ -294,9 +294,9 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	function payment_notify() {
 		global $camptix;
 
-		$payment_token  = isset( $_REQUEST['tix_payment_token'] ) ? trim( $_REQUEST['tix_payment_token'] ) : '';
-		$transaction_id = isset( $_REQUEST['tran_id'] ) ? $_REQUEST['tran_id'] : '';
-		$val_id         = isset( $_REQUEST['val_id'] ) ? $_REQUEST['val_id'] : '';
+		$payment_token  = trim( $_REQUEST['tix_payment_token'] ?? '' );
+		$transaction_id = $_REQUEST['tran_id'] ?? '';
+		$val_id         = $_REQUEST['val_id'] ?? '';
 
 		$order = $this->get_order( $payment_token );
 
@@ -314,7 +314,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 			)
 		);
 
-		if ( $this->_ipn_hash_varify( $this->options['store_password'], $transaction_data ) ) {
+		if ( $this->ipn_hash_varify( $this->options['store_password'], $transaction_data ) ) {
 
 			$payment_data = [
 				'transaction_id'      => $transaction_id,
@@ -346,7 +346,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	public function payment_cancel() {
 		global $camptix;
 
-		$payment_token = isset( $_REQUEST['tix_payment_token'] ) ? trim( $_REQUEST['tix_payment_token'] ) : '';
+		$payment_token = trim( $_REQUEST['tix_payment_token'] ?? '' );
 		if ( ! $payment_token ) {
 			return $camptix->error( 'empty token' );
 		}
@@ -373,7 +373,7 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	public function payment_failed() {
 		global $camptix;
 
-		$payment_token = isset( $_REQUEST['tix_payment_token'] ) ? trim( $_REQUEST['tix_payment_token'] ) : '';
+		$payment_token = trim( $_REQUEST['tix_payment_token'] ?? '' );
 		if ( ! $payment_token ) {
 			return $camptix->error( 'empty token' );
 		}
@@ -437,41 +437,37 @@ class SSLCommerz extends \CampTix_Payment_Method {
 	 *
 	 * @return boolean
 	 */
-	function _ipn_hash_varify( $store_passwd, $data ) {
+	protected function ipn_hash_varify( $store_passwd, $data ) {
+		if ( ! isset( $data['verify_sign'], $data['verify_key'] ) ) {
+			return false;
+		}
 
-		if ( isset( $data['verify_sign'] ) && isset( $data['verify_key'] ) ) {
-			$pre_define_key = explode(',', $data['verify_key']);
-			$new_data       = array();
+		$pre_define_key = explode( ',', $data['verify_key'] );
+		$new_data       = array();
 
-			if ( !empty( $pre_define_key ) ) {
-				foreach ( $pre_define_key as $value ) {
-					if ( isset( $data[ $value ] ) ) {
-						$new_data[ $value ] = $data[$value];
-					}
+		if ( ! empty( $pre_define_key ) ) {
+			foreach ( $pre_define_key as $value ) {
+				if ( isset( $data[ $value ] ) ) {
+					$new_data[ $value ] = $data[$value];
 				}
-			}
-
-			# ADD MD5 OF STORE PASSWORD
-			$new_data['store_passwd'] = md5( $store_passwd );
-
-			# SORT THE KEY AS BEFORE
-			ksort( $new_data );
-
-			$hash_string = '';
-			foreach ( $new_data as $key => $value ) {
-				$hash_string .= $key . '=' . $value .'&';
-			}
-
-			$hash_string = rtrim( $hash_string, '&' );
-
-			if ( md5( $hash_string ) == $data['verify_sign'] ) {
-				return true;
-			} else {
-				return false;
 			}
 		}
 
-		return false;
+		// ADD MD5 OF STORE PASSWORD
+		$new_data['store_passwd'] = md5( $store_passwd );
+
+		// SORT THE KEY AS BEFORE
+		ksort( $new_data );
+
+		$hash_string = '';
+		foreach ( $new_data as $key => $value ) {
+			$hash_string .= $key . '=' . $value .'&';
+		}
+
+		$hash_string = rtrim( $hash_string, '&' );
+		$hash_string = md5( $hash_string );
+
+		return hash_equals( $hash_string, $data['verify_sign'] );
 	}
 
 	/**
