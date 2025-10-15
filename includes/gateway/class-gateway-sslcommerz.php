@@ -358,18 +358,29 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		global $camptix;
 
 		$payment_token = isset( $_REQUEST['tix_payment_token'] ) ? trim( $_REQUEST['tix_payment_token'] ) : '';
-
-		$camptix->log('Fail token: ' . $payment_token );
-
 		if ( ! $payment_token ) {
 			return $camptix->error( 'empty token' );
 		}
 
 		$order = $this->get_order( $payment_token );
-
 		if ( ! $order ) {
 			return $camptix->error( 'could not find order' );
 		}
+
+		/*
+		 * Log the failure against the order.
+		 * Unsetting additional fields that are not necessary in the log.
+		 */
+		$log_details = array_filter( $_POST );
+		unset(
+			$log_details['pass'], // Present in sandbox mode, not production :phew:.
+			$log_details['key'],
+			$log_details['store_id'],
+			$log_details['value_a'], $log_details['value_b'], $log_details['value_c'], $log_details['value_d'],
+			$log_details['verify_sign'], $log_details['verify_sign_sha2'], $log_details['verify_key']
+		);
+
+		$camptix->log( 'Payment failed: ' . $payment_token, $order['attendee_id'], $log_details );
 
 		return $camptix->payment_result( $payment_token, \CampTix_Plugin::PAYMENT_STATUS_FAILED );
 	}
