@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * AamarPay gateway
+ * SSLCommerz gateway
  */
 class SSLCommerz extends \CampTix_Payment_Method {
 
@@ -300,16 +300,19 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		$transaction_id = isset( $_REQUEST['tran_id'] ) ? $_REQUEST['tran_id'] : '';
 		$val_id         = isset( $_REQUEST['val_id'] ) ? $_REQUEST['val_id'] : '';
 
-		$camptix->log( 'Payment validation from SSLCommerz', null, compact( 'payment_token', 'transaction_id', 'val_id' ) );
+		// The payment transaction data is always in the POST data.
+		$transaction_data = $_POST;
 
-		if ( $this->_ipn_hash_varify( $this->options['store_password'], $_POST ) ) {
+		$camptix->log( 'Payment validation from SSLCommerz', null, compact( 'payment_token', 'transaction_id', 'val_id', 'transaction_data' ) );
+
+		if ( $this->_ipn_hash_varify( $this->options['store_password'], $transaction_data ) ) {
 
 			$camptix->log('IPN hash verified');
 
 			$payment_data = [
 				'transaction_id'      => $transaction_id,
 				'val_id'              => $val_id,
-				'transaction_details' => $_REQUEST,
+				'transaction_details' => $transaction_data,
 			];
 
 			if ( $this->verify_transaction( $val_id, $payment_token ) ) {
@@ -391,7 +394,8 @@ class SSLCommerz extends \CampTix_Payment_Method {
 				'store_id'     => $this->options['merchant_id'],
 				'store_passwd' => $this->options['store_password'],
 				'format'       => 'json'
-			]
+			],
+			'timeout' => 30,
 		];
 
 		$response = wp_remote_get( $url, $args );
@@ -399,8 +403,6 @@ class SSLCommerz extends \CampTix_Payment_Method {
 		if ( ! is_wp_error( $response ) ) {
 			$body  = json_decode( wp_remote_retrieve_body( $response ) );
 			$order = $this->get_order( $payment_token );
-
-			// $camptix->log( print_r( $body, true ) );
 
 			if ( in_array( $body->status, ['VALID', 'VALIDATED'] ) && $order['total'] == $body->amount ) {
 				return true;
