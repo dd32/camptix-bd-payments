@@ -307,8 +307,6 @@ class SSLCommerz extends \CampTix_Payment_Method {
 
 		if ( $this->_ipn_hash_varify( $this->options['store_password'], $transaction_data ) ) {
 
-			$camptix->log('IPN hash verified');
-
 			$payment_data = [
 				'transaction_id'      => $transaction_id,
 				'val_id'              => $val_id,
