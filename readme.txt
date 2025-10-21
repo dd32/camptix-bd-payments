@@ -1,11 +1,11 @@
 === CampTix Bangldeshi Payments ===
-Contributors: tareq1988
+Contributors: tareq1988, dd32
 Donate link: https://tareq.co/donate/
 Tags: camptix, camptix payment, ticketing, payment gateways
-Requires at least: 4.0
-Tested up to: 5.2
-Stable tag: 1.2
-Requires PHP: 5.6
+Requires at least: 6.8
+Tested up to: 6.9
+Stable tag: 1.3
+Requires PHP: 8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,6 +56,11 @@ Right now it supports `BDT` currency only.
 Nothing here
 
 == Changelog ==
+
+= v1.3 (??, 2025) =
+ * Fix compatibility with Camptix Require Login.
+ * Improved logging for transaction data.
+ * Improved checks to prevent successful payments being marked as timeout.
 
 = v1.2 (15th June, 2019) =
 
